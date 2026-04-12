@@ -92,7 +92,8 @@ Chatworkのボットとして動作し、ユーザーの質問に日本語で答
 
 async function processWebhookAsync(payload: ChatworkWebhookPayload): Promise<void> {
   const { webhook_event_type, webhook_event } = payload;
-  if (webhook_event_type !== "mention_to_me") return;
+  if (webhook_event_type !== "message_created") return;
+  if (!webhook_event.body.includes("[To:")) return;
 
   const userMessage = extractUserMessage(webhook_event.body);
   if (!userMessage) return;
