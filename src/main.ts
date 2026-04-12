@@ -1,7 +1,11 @@
 // Deno Deploy エントリーポイント — 毎朝 9:00 JST に GA4 日次レポートを Chatwork へ投稿する。
-
 import { runAnalyst } from "./analyst.ts";
 import { runPoster } from "./poster.ts";
+
+// Deno Deploy は HTTP サーバーが必須
+Deno.serve({ port: 8000 }, (_req: Request) => {
+  return new Response("ok", { status: 200 });
+});
 
 Deno.cron("daily-ga4-report", "0 0 * * *", async () => {
   console.log("GA4 日次レポート送信開始");
