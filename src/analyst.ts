@@ -140,6 +140,12 @@ function selectQueryConfig(purpose: string): QueryConfig {
       dimensions: ["sessionSourceMedium"],
     };
   }
+  if (purpose.includes("ランディング")) {
+    return {
+      metrics: ["sessions", "conversions", "sessionConversionRate", "bounceRate"],
+      dimensions: ["landingPage"],
+    };
+  }
   // デフォルト: 概況・サマリー
   return {
     metrics: ["sessions", "totalUsers", "newUsers", "conversions", "sessionConversionRate"],

@@ -103,6 +103,10 @@ export async function runPoster(data: AnalystOutput): Promise<void> {
   await postMessage(formatMessage(data));
 }
 
+export async function runPosterRaw(text: string): Promise<void> {
+  await postMessage(text);
+}
+
 // ---- CLI エントリーポイント ----
 
 async function main() {
