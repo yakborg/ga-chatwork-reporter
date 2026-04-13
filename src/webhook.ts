@@ -17,7 +17,7 @@ interface ChatworkWebhookPayload {
 }
 
 function extractUserMessage(body: string): string {
-  return body.replace(/\[To:\d+\]/g, "").trim();
+  return body.replace(/\[To:\d+\]|@\S+/g, "").trim();
 }
 
 const TOOLS: Anthropic.Tool[] = [
@@ -93,7 +93,7 @@ Chatworkのボットとして動作し、ユーザーの質問に日本語で答
 async function processWebhookAsync(payload: ChatworkWebhookPayload): Promise<void> {
   const { webhook_event_type, webhook_event } = payload;
   if (webhook_event_type !== "message_created") return;
-  if (!webhook_event.body.includes("[To:")) return;
+  if (!webhook_event.body.includes("@")) return;
 
   const userMessage = extractUserMessage(webhook_event.body);
   if (!userMessage) return;
@@ -150,29 +150,12 @@ async function processWebhookAsync(payload: ChatworkWebhookPayload): Promise<voi
 }
 
 export async function handleWebhook(req: Request): Promise<Response> {
-  // デバッグ①: リクエスト到達確認（ヘッダーも含む）
-  const headers: Record<string, string> = {};
-  req.headers.forEach((v, k) => {
-    headers[k] = v;
-  });
-  console.log("[webhook] リクエスト到達:", req.method, new URL(req.url).pathname);
-  console.log("[webhook] headers:", JSON.stringify(headers));
-
-  // デバッグ②: ボディをテキストで読む（req.json() より先に）
-  const rawBody = await req.text();
-  console.log("[webhook] raw body:", rawBody);
-
   let payload: ChatworkWebhookPayload;
   try {
-    payload = JSON.parse(rawBody) as ChatworkWebhookPayload;
+    payload = await req.json() as ChatworkWebhookPayload;
   } catch {
-    console.error("[webhook] JSON parse 失敗");
     return new Response("bad request", { status: 400 });
   }
-
-  // デバッグ③: パース後の主要フィールド確認
-  console.log("[webhook] event_type:", payload.webhook_event_type);
-  console.log("[webhook] body:", payload.webhook_event?.body);
 
   (async () => {
     try {
