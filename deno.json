@@ -2,10 +2,7 @@
   "tasks": {
     "start": "deno run --allow-net --allow-env src/main.ts",
     "dev": "deno run --watch --allow-net --allow-env src/main.ts",
-    "analyst": "deno run --allow-env --allow-net --allow-read src/analyst.ts",
-    "poster": "deno run --allow-env --allow-net src/poster.ts",
-    "report": "deno task analyst \"昨日の概況\" \"yesterday\" | deno task poster",
-    "comment": "deno run --allow-env --allow-net --allow-read src/commentator.ts"
+    "analyst": "deno run --allow-env --allow-net --allow-read src/analyst.ts"
   },
   "imports": {
     "npm:@anthropic-ai/sdk": "npm:@anthropic-ai/sdk"

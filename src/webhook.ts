@@ -1,7 +1,8 @@
-// Chatwork Webhook Bot
+// Chatwork Webhook Bot — ルーム別 GA プロパティ対応
 import Anthropic from "npm:@anthropic-ai/sdk";
 import { runAnalyst } from "./analyst.ts";
 import { runPosterRaw } from "./poster.ts";
+import { findTargetByRoom } from "./targets.ts";
 
 const MAX_ITERATIONS = 10;
 const MODEL = "claude-haiku-4-5-20251001";
@@ -58,17 +59,19 @@ const TOOLS: Anthropic.Tool[] = [
 async function processToolCall(
   toolName: string,
   toolInput: Record<string, string>,
+  propertyId: string,
+  roomId: string,
 ): Promise<string> {
   if (toolName === "get_ga4_data") {
     const { purpose, period } = toolInput;
-    console.log(`[webhook] get_ga4_data: purpose="${purpose}" period="${period}"`);
-    const data = await runAnalyst(purpose, period);
+    console.log(`[webhook] get_ga4_data: purpose="${purpose}" period="${period}" property=${propertyId}`);
+    const data = await runAnalyst(purpose, period, propertyId);
     return JSON.stringify(data, null, 2);
   }
   if (toolName === "post_chatwork_message") {
     const { message } = toolInput;
-    console.log(`[webhook] post_chatwork_message: ${message.slice(0, 80)}...`);
-    await runPosterRaw(message);
+    console.log(`[webhook] post_chatwork_message room=${roomId}: ${message.slice(0, 80)}...`);
+    await runPosterRaw(message, roomId);
     return "投稿完了";
   }
   return `未知のツール: ${toolName}`;
@@ -95,10 +98,17 @@ async function processWebhookAsync(payload: ChatworkWebhookPayload): Promise<voi
   if (webhook_event_type !== "message_created") return;
   if (!webhook_event.body.includes("@")) return;
 
+  const roomId = String(webhook_event.room_id);
+  const target = findTargetByRoom(roomId);
+  if (!target) {
+    console.log(`[webhook] 未登録ルーム: ${roomId} — 無視`);
+    return;
+  }
+
   const userMessage = extractUserMessage(webhook_event.body);
   if (!userMessage) return;
 
-  console.log(`[webhook] ユーザーメッセージ: "${userMessage}"`);
+  console.log(`[webhook] room=${roomId} property=${target.propertyId} msg="${userMessage}"`);
 
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY が未設定");
@@ -123,7 +133,7 @@ async function processWebhookAsync(payload: ChatworkWebhookPayload): Promise<voi
       if (!posted) {
         const textBlock = response.content.find((b) => b.type === "text");
         if (textBlock && textBlock.type === "text" && textBlock.text.trim()) {
-          await runPosterRaw(textBlock.text);
+          await runPosterRaw(textBlock.text, roomId);
         }
       }
       break;
@@ -138,6 +148,8 @@ async function processWebhookAsync(payload: ChatworkWebhookPayload): Promise<voi
         const result = await processToolCall(
           block.name,
           block.input as Record<string, string>,
+          target.propertyId,
+          roomId,
         );
         toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
         if (block.name === "post_chatwork_message") posted = true;
@@ -157,16 +169,20 @@ export async function handleWebhook(req: Request): Promise<Response> {
     return new Response("bad request", { status: 400 });
   }
 
+  const roomId = String(payload.webhook_event?.room_id ?? "");
+
   (async () => {
     try {
       await processWebhookAsync(payload);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[webhook] 処理エラー:", msg);
-      try {
-        await runPosterRaw(`⚠ Bot エラーが発生しました\n${msg}`);
-      } catch {
-        // ignore
+      if (roomId && findTargetByRoom(roomId)) {
+        try {
+          await runPosterRaw(`⚠ Bot エラーが発生しました\n${msg}`, roomId);
+        } catch {
+          // ignore
+        }
       }
     }
   })();

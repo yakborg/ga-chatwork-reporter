@@ -1,6 +1,6 @@
 // GA4 analyst — データ取得・集計のみ。コメント生成・文章化は行わない。
 
-const PROPERTY_ID = "properties/314959805";
+const DEFAULT_PROPERTY_ID = "properties/314959805";
 const SA_KEY_PATH = `${Deno.env.get("HOME") ?? "/root"}/.secrets/gcp/ga4-mcp-key.json`;
 
 // ---- 型定義 ----
@@ -221,12 +221,13 @@ async function getAccessToken(): Promise<string> {
 
 async function runReport(
   accessToken: string,
+  propertyId: string,
   startDate: string,
   endDate: string,
   metrics: string[],
   dimensions: string[],
 ): Promise<GA4ReportResponse> {
-  const url = `https://analyticsdata.googleapis.com/v1beta/${PROPERTY_ID}:runReport`;
+  const url = `https://analyticsdata.googleapis.com/v1beta/${propertyId}:runReport`;
 
   const body: Record<string, unknown> = {
     dateRanges: [{ startDate, endDate }],
@@ -283,7 +284,11 @@ function parseBreakdown(
 
 // ---- エクスポート関数 ----
 
-export async function runAnalyst(purpose: string, period: string): Promise<AnalystOutput> {
+export async function runAnalyst(
+  purpose: string,
+  period: string,
+  propertyId = DEFAULT_PROPERTY_ID,
+): Promise<AnalystOutput> {
   const errors: string[] = [];
   const resolvedPeriod = resolvePeriod(period);
   const { metrics, dimensions } = selectQueryConfig(purpose);
@@ -299,6 +304,7 @@ export async function runAnalyst(purpose: string, period: string): Promise<Analy
 
     const summaryRes = await runReport(
       accessToken,
+      propertyId,
       resolvedPeriod.start_date,
       resolvedPeriod.end_date,
       metrics,
@@ -309,6 +315,7 @@ export async function runAnalyst(purpose: string, period: string): Promise<Analy
     if (dimensions.length > 0) {
       const breakdownRes = await runReport(
         accessToken,
+        propertyId,
         resolvedPeriod.start_date,
         resolvedPeriod.end_date,
         metrics,
@@ -321,7 +328,7 @@ export async function runAnalyst(purpose: string, period: string): Promise<Analy
   }
 
   return {
-    property_id: PROPERTY_ID,
+    property_id: propertyId,
     period: resolvedPeriod,
     purpose,
     fetched_at: fetchedAt,
@@ -334,12 +341,12 @@ export async function runAnalyst(purpose: string, period: string): Promise<Analy
 // ---- CLI エントリーポイント ----
 
 async function main() {
-  const [purpose, period] = Deno.args;
+  const [purpose, period, propertyId] = Deno.args;
   if (!purpose || !period) {
-    console.error('Usage: deno run ... src/analyst.ts "<purpose>" "<period>"');
+    console.error('Usage: deno run ... src/analyst.ts "<purpose>" "<period>" [propertyId]');
     Deno.exit(1);
   }
-  const output = await runAnalyst(purpose, period);
+  const output = await runAnalyst(purpose, period, propertyId);
   console.log(JSON.stringify(output, null, 2));
 }
 
