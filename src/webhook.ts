@@ -25,28 +25,29 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "get_ga4_data",
     description:
-      "GA4からアクセス解析データを取得します。ユーザーが特定の期間や分析目的を指定した場合に使用してください。",
+      "GA4からアクセス解析データを取得します。取得したいメトリクスとディメンションを直接指定してください。",
     input_schema: {
       type: "object" as const,
       properties: {
-        purpose: {
-          type: "string",
+        metrics: {
+          type: "array",
+          items: { type: "string" },
           description:
-            "分析目的（例: 昨日の概況、チャネル別分析、ランディングページ分析、デバイス別分析、参照元分析）",
+            "取得するGA4メトリクス名の配列。例: [\"sessions\", \"conversions\", \"sessionConversionRate\"]",
+        },
+        dimensions: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "取得するGA4ディメンション名の配列（省略時は集計値のみ）。例: [\"landingPage\"]",
         },
         period: {
           type: "string",
           description:
             "期間（yesterday / last_7_days / last_week / last_30_days / last_month / YYYY-MM-DD/YYYY-MM-DD）",
         },
-        extra_metrics: {
-          type: "array",
-          items: { type: "string" },
-          description:
-            "purposeのデフォルト指標に追加で取得したいGA4メトリクス名（例: [\"conversions\", \"sessionConversionRate\", \"totalRevenue\", \"ecommercePurchases\"]）",
-        },
       },
-      required: ["purpose", "period"],
+      required: ["metrics", "period"],
     },
   },
   {
@@ -69,10 +70,10 @@ async function processToolCall(
   roomId: string,
 ): Promise<string> {
   if (toolName === "get_ga4_data") {
-    const { purpose, period } = toolInput;
-    const extraMetrics = (toolInput as unknown as { extra_metrics?: string[] }).extra_metrics ?? [];
-    console.log(`[webhook] get_ga4_data: purpose="${purpose}" period="${period}" extra_metrics=${JSON.stringify(extraMetrics)} property=${propertyId}`);
-    const data = await runAnalyst(purpose, period, propertyId, extraMetrics);
+    const input = toolInput as unknown as { metrics: string[]; dimensions?: string[]; period: string };
+    const { metrics, dimensions = [], period } = input;
+    console.log(`[webhook] get_ga4_data: metrics=${JSON.stringify(metrics)} dimensions=${JSON.stringify(dimensions)} period="${period}" property=${propertyId}`);
+    const data = await runAnalyst(metrics, dimensions, period, propertyId);
     return JSON.stringify(data, null, 2);
   }
   if (toolName === "post_chatwork_message") {
@@ -89,27 +90,46 @@ Chatworkのボットとして動作し、ユーザーの質問に日本語で答
 
 【行動指針】
 - ユーザーの質問に応じて get_ga4_data でデータを取得し、分析してください
+- metrics と dimensions はユーザーの質問から直接判断して指定してください
 - 返答は必ず post_chatwork_message を呼び出してChatworkに投稿してください
 - 数値は具体的に示し、簡潔にまとめてください
 - データ取得エラーが発生した場合はその旨を返答に含めてください
 
-【分析の目安】
-- "昨日" → period: yesterday / "先週" → period: last_week / "先月" → period: last_month / "直近7日" → period: last_7_days
-- チャネル・流入元 → purpose: チャネル別分析
-- ページ・LP → purpose: ランディングページ分析
-- デバイス → purpose: デバイス別分析
-- それ以外 → purpose: 昨日の概況
+【period の指定】
+- "昨日" → yesterday
+- "先週" → last_week
+- "先月" → last_month
+- "直近7日" → last_7_days
+- "直近30日" → last_30_days
+- 特定範囲 → YYYY-MM-DD/YYYY-MM-DD
 
-【extra_metrics の使い方】
-ユーザーがコンバージョン・売上・購入などに言及したとき、または purpose のデフォルト指標に不足があるときは extra_metrics で補完してください。
-主なメトリクス名:
-- conversions — コンバージョン数
-- sessionConversionRate — セッションCV率
+【よく使うメトリクス (metrics)】
+- sessions — セッション数
+- totalUsers — ユーザー数
+- newUsers — 新規ユーザー数
+- screenPageViews — ページビュー数
+- conversions — キーイベント数（コンバージョン数）
+- sessionConversionRate — セッションCV率（%）
+- bounceRate — 直帰率（%）
+- engagementRate — エンゲージメント率（%）
+- averageSessionDuration — 平均セッション時間（秒）
 - totalRevenue — 総収益
 - ecommercePurchases — EC購入数
-- engagementRate — エンゲージメント率
-- averageSessionDuration — 平均セッション時間（ページ分析以外で必要な場合）
-- screenPageViews — PV数（概況分析で必要な場合）`;
+
+【よく使うディメンション (dimensions)】
+- sessionDefaultChannelGroup — チャネルグループ
+- landingPage — ランディングページ（着地ページ）
+- pagePath — ページパス
+- deviceCategory — デバイスカテゴリ
+- sessionSourceMedium — 参照元/メディア
+- sessionSource — 参照元
+- country — 国
+- date — 日付
+
+【指定例】
+- 着地ページ別のキーイベント数・CV率 → metrics: ["sessions","conversions","sessionConversionRate","bounceRate"], dimensions: ["landingPage"]
+- チャネル別のセッション・CV → metrics: ["sessions","conversions","sessionConversionRate"], dimensions: ["sessionDefaultChannelGroup"]
+- 昨日の概況 → metrics: ["sessions","totalUsers","newUsers","conversions","sessionConversionRate"], dimensions: []`;
 
 async function processWebhookAsync(payload: ChatworkWebhookPayload): Promise<void> {
   const { webhook_event_type, webhook_event } = payload;

@@ -38,16 +38,12 @@ export interface BreakdownItem {
 export interface AnalystOutput {
   property_id: string;
   period: PeriodResolved;
-  purpose: string;
+  metrics: string[];
+  dimensions: string[];
   fetched_at: string;
   summary: Record<string, number>;
   breakdown: BreakdownItem[];
   errors: string[];
-}
-
-interface QueryConfig {
-  metrics: string[];
-  dimensions: string[];
 }
 
 // ---- JST 日付ユーティリティ ----
@@ -81,7 +77,6 @@ function resolvePeriod(period: string): PeriodResolved {
         end_date: addDays(year, month, day, -1),
       };
     case "last_week": {
-      // 先週月〜日（日本式: 月曜始まり）
       const daysSinceMon = (dow + 6) % 7;
       return {
         label: "last_week",
@@ -111,47 +106,6 @@ function resolvePeriod(period: string): PeriodResolved {
       return { label: period, start_date, end_date };
     }
   }
-}
-
-// ---- purpose → メトリクス/ディメンション選択 ----
-
-function selectQueryConfig(purpose: string): QueryConfig {
-  if (purpose.includes("チャネル")) {
-    return {
-      metrics: ["sessions", "conversions", "sessionConversionRate"],
-      dimensions: ["sessionDefaultChannelGroup"],
-    };
-  }
-  // ランディング・着地ページは "ページ" より先に評価する
-  if (purpose.includes("ランディング") || purpose.includes("着地ページ")) {
-    return {
-      metrics: ["sessions", "conversions", "sessionConversionRate", "bounceRate"],
-      dimensions: ["landingPage"],
-    };
-  }
-  if (purpose.includes("ページ")) {
-    return {
-      metrics: ["screenPageViews", "averageSessionDuration", "bounceRate"],
-      dimensions: ["pagePath"],
-    };
-  }
-  if (purpose.includes("デバイス")) {
-    return {
-      metrics: ["sessions", "conversions"],
-      dimensions: ["deviceCategory"],
-    };
-  }
-  if (purpose.includes("流入") || purpose.includes("参照元") || purpose.includes("ソース")) {
-    return {
-      metrics: ["sessions", "newUsers", "conversions"],
-      dimensions: ["sessionSourceMedium"],
-    };
-  }
-  // デフォルト: 概況・サマリー
-  return {
-    metrics: ["sessions", "totalUsers", "newUsers", "conversions", "sessionConversionRate"],
-    dimensions: [],
-  };
 }
 
 // ---- Google OAuth2（サービスアカウント JWT） ----
@@ -295,18 +249,13 @@ function parseBreakdown(
 // ---- エクスポート関数 ----
 
 export async function runAnalyst(
-  purpose: string,
+  metrics: string[],
+  dimensions: string[],
   period: string,
   propertyId = DEFAULT_PROPERTY_ID,
-  extraMetrics: string[] = [],
 ): Promise<AnalystOutput> {
   const errors: string[] = [];
   const resolvedPeriod = resolvePeriod(period);
-  const base = selectQueryConfig(purpose);
-  const metrics = extraMetrics.length > 0
-    ? [...new Set([...base.metrics, ...extraMetrics])]
-    : base.metrics;
-  const { dimensions } = base;
 
   const jstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
   const fetchedAt = jstNow.toISOString().replace("Z", "+09:00");
@@ -345,7 +294,8 @@ export async function runAnalyst(
   return {
     property_id: propertyId,
     period: resolvedPeriod,
-    purpose,
+    metrics,
+    dimensions,
     fetched_at: fetchedAt,
     summary,
     breakdown,
@@ -356,12 +306,16 @@ export async function runAnalyst(
 // ---- CLI エントリーポイント ----
 
 async function main() {
-  const [purpose, period, propertyId] = Deno.args;
-  if (!purpose || !period) {
-    console.error('Usage: deno run ... src/analyst.ts "<purpose>" "<period>" [propertyId]');
+  const [metricsArg, period, propertyId, dimensionsArg] = Deno.args;
+  if (!metricsArg || !period) {
+    console.error(
+      'Usage: deno run ... src/analyst.ts "<metrics,comma-sep>" "<period>" [propertyId] [dimensions,comma-sep]',
+    );
     Deno.exit(1);
   }
-  const output = await runAnalyst(purpose, period, propertyId);
+  const metrics = metricsArg.split(",").map((s) => s.trim());
+  const dimensions = dimensionsArg ? dimensionsArg.split(",").map((s) => s.trim()) : [];
+  const output = await runAnalyst(metrics, dimensions, period, propertyId);
   console.log(JSON.stringify(output, null, 2));
 }
 
