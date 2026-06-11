@@ -39,6 +39,12 @@ const TOOLS: Anthropic.Tool[] = [
           description:
             "期間（yesterday / last_7_days / last_week / last_30_days / last_month / YYYY-MM-DD/YYYY-MM-DD）",
         },
+        extra_metrics: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "purposeのデフォルト指標に追加で取得したいGA4メトリクス名（例: [\"conversions\", \"sessionConversionRate\", \"totalRevenue\", \"ecommercePurchases\"]）",
+        },
       },
       required: ["purpose", "period"],
     },
@@ -64,8 +70,9 @@ async function processToolCall(
 ): Promise<string> {
   if (toolName === "get_ga4_data") {
     const { purpose, period } = toolInput;
-    console.log(`[webhook] get_ga4_data: purpose="${purpose}" period="${period}" property=${propertyId}`);
-    const data = await runAnalyst(purpose, period, propertyId);
+    const extraMetrics = (toolInput as unknown as { extra_metrics?: string[] }).extra_metrics ?? [];
+    console.log(`[webhook] get_ga4_data: purpose="${purpose}" period="${period}" extra_metrics=${JSON.stringify(extraMetrics)} property=${propertyId}`);
+    const data = await runAnalyst(purpose, period, propertyId, extraMetrics);
     return JSON.stringify(data, null, 2);
   }
   if (toolName === "post_chatwork_message") {
@@ -91,7 +98,18 @@ Chatworkのボットとして動作し、ユーザーの質問に日本語で答
 - チャネル・流入元 → purpose: チャネル別分析
 - ページ・LP → purpose: ランディングページ分析
 - デバイス → purpose: デバイス別分析
-- それ以外 → purpose: 昨日の概況`;
+- それ以外 → purpose: 昨日の概況
+
+【extra_metrics の使い方】
+ユーザーがコンバージョン・売上・購入などに言及したとき、または purpose のデフォルト指標に不足があるときは extra_metrics で補完してください。
+主なメトリクス名:
+- conversions — コンバージョン数
+- sessionConversionRate — セッションCV率
+- totalRevenue — 総収益
+- ecommercePurchases — EC購入数
+- engagementRate — エンゲージメント率
+- averageSessionDuration — 平均セッション時間（ページ分析以外で必要な場合）
+- screenPageViews — PV数（概況分析で必要な場合）`;
 
 async function processWebhookAsync(payload: ChatworkWebhookPayload): Promise<void> {
   const { webhook_event_type, webhook_event } = payload;

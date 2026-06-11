@@ -288,10 +288,15 @@ export async function runAnalyst(
   purpose: string,
   period: string,
   propertyId = DEFAULT_PROPERTY_ID,
+  extraMetrics: string[] = [],
 ): Promise<AnalystOutput> {
   const errors: string[] = [];
   const resolvedPeriod = resolvePeriod(period);
-  const { metrics, dimensions } = selectQueryConfig(purpose);
+  const base = selectQueryConfig(purpose);
+  const metrics = extraMetrics.length > 0
+    ? [...new Set([...base.metrics, ...extraMetrics])]
+    : base.metrics;
+  const { dimensions } = base;
 
   const jstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
   const fetchedAt = jstNow.toISOString().replace("Z", "+09:00");
