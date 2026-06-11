@@ -122,6 +122,13 @@ function selectQueryConfig(purpose: string): QueryConfig {
       dimensions: ["sessionDefaultChannelGroup"],
     };
   }
+  // ランディング・着地ページは "ページ" より先に評価する
+  if (purpose.includes("ランディング") || purpose.includes("着地ページ")) {
+    return {
+      metrics: ["sessions", "conversions", "sessionConversionRate", "bounceRate"],
+      dimensions: ["landingPage"],
+    };
+  }
   if (purpose.includes("ページ")) {
     return {
       metrics: ["screenPageViews", "averageSessionDuration", "bounceRate"],
@@ -138,12 +145,6 @@ function selectQueryConfig(purpose: string): QueryConfig {
     return {
       metrics: ["sessions", "newUsers", "conversions"],
       dimensions: ["sessionSourceMedium"],
-    };
-  }
-  if (purpose.includes("ランディング")) {
-    return {
-      metrics: ["sessions", "conversions", "sessionConversionRate", "bounceRate"],
-      dimensions: ["landingPage"],
     };
   }
   // デフォルト: 概況・サマリー
@@ -219,6 +220,13 @@ async function getAccessToken(): Promise<string> {
 
 // ---- GA4 Data API ----
 
+function buildOrderBys(metrics: string[]): Record<string, unknown>[] {
+  const priority = ["conversions", "sessions", "screenPageViews", "totalUsers"];
+  return priority
+    .filter((m) => metrics.includes(m))
+    .map((m) => ({ metric: { metricName: m }, desc: true }));
+}
+
 async function runReport(
   accessToken: string,
   propertyId: string,
@@ -236,6 +244,8 @@ async function runReport(
   };
   if (dimensions.length > 0) {
     body.dimensions = dimensions.map((d) => ({ name: d }));
+    const orderBys = buildOrderBys(metrics);
+    if (orderBys.length > 0) body.orderBys = orderBys;
   }
 
   const res = await fetch(url, {
