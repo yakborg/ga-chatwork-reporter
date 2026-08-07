@@ -114,6 +114,11 @@ fi
 grep -qiE '\.apps\.googleuserconten[t]\.com' <<<"$scan"
 grep_rc "OAuth client_id suffix" $? && die "OAuth client_id の suffix"
 
+# Google OAuth の client_secret は GOCSPX 接頭辞（直後にハイフン）を持つ。gitleaks の
+# 既定ルールは変数名を付けても拾わない（2026-08-07 実測）。構造式セットの必須項目。
+grep -qE 'GOCSP[X]-' <<<"$scan"
+grep_rc "Google OAuth client_secret" $? && die "Google OAuth の client_secret（GOCSPX 接頭辞）"
+
 # Chatwork API トークン = 32 桁の小文字 hex。gitleaks の既定ルールは変数名の文脈が
 # 無いと拾わないため（地の文への貼り付け・引用符付きのコード例が素通しする。2026-08-07 実測）、
 # 構造式をここに置く。

@@ -46,3 +46,10 @@ keywords = ["googleusercontent"]
 # 数値 ID（room ID・account ID）は**構造式にしない**。桁数で拾うと誤検知が常態化し、
 # ゲートを外す圧力に直結する。絶対に出てはいけない具体値だけを
 # ~/.secrets/gate-patterns へ足して文字列検査側で捕まえる。
+
+[[rules]]
+id = "ga-chatwork-reporter-google-client-secret"
+description = "Google OAuth の client_secret（GOCSPX 接頭辞・直後にハイフン）"
+# 既定ルールは変数名を付けても拾わない（2026-08-07 実測）。構造式セットの必須項目。
+regex = '''GOCSP[X]-[A-Za-z0-9_\-]{10,}'''
+keywords = ["GOCSP"]
