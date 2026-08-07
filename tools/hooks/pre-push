@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# push 直前ゲート: これから送出する commit の追加行とファイル名を検査する。
+#
+# pre-commit だけでは「push 対象の全 commit がゲートを通った」ことを保証できない
+# （ゲート導入前の commit・fetch/rebase/merge で取り込んだ commit・別環境で作られた commit が
+# 素通しする）。このリポジトリは公開なので、これは push 自動化のためではなく漏洩防止のため。
+#
+# stdin: <local ref> <local oid> <remote ref> <remote oid>
+set -uo pipefail
+
+remote_name=${1:-origin}
+scan="$(git rev-parse --show-toplevel)/tools/secret-scan.sh"
+
+if [ ! -x "$scan" ]; then
+  echo "pre-push: BLOCK: $scan が無い/実行できない。fail-closed で中止する" >&2
+  exit 1
+fi
+
+rc=0
+while read -r _local_ref local_oid _remote_ref remote_oid; do
+  # ブランチ削除（local が全 0）は送出内容が無いので検査不要
+  [ -z "${local_oid//0/}" ] && continue
+
+  if [ -z "${remote_oid//0/}" ]; then
+    # リモートに無い ref: 既にリモートへ届いている commit を除いた分だけを見る。
+    # 判定材料は refs/remotes/<remote>/* なので、fetch/prune 前だと古い可能性がある
+    # （リモート側で消えた・force-push で置き換わった履歴を過小評価しうる）。
+    # そのため「送出なし」と判定した場合も黙って飛ばさず、必ず表示する。
+    outgoing=$(git rev-list "$local_oid" --not --remotes="$remote_name") ||
+      { echo "pre-push: BLOCK: 送出範囲を計算できない。fail-closed で中止する" >&2; rc=1; continue; }
+    if [ -z "$outgoing" ]; then
+      echo "pre-push: $local_oid は refs/remotes/$remote_name/* に含まれるため検査を飛ばす（古い場合は git fetch --prune 後に再実行する）"
+      continue
+    fi
+    oldest=$(tail -1 <<<"$outgoing")
+    from=$(git rev-parse -q --verify "${oldest}^") ||
+      from=$(git hash-object -t tree /dev/null) # root commit を含む場合は空ツリー起点
+  else
+    from=$remote_oid
+  fi
+
+  "$scan" range "$from" "$local_oid" || rc=1
+done
+
+if [ "$rc" -ne 0 ]; then
+  echo "pre-push: ABORT: push しない" >&2
+  exit 1
+fi
+exit 0

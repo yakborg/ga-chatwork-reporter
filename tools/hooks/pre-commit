@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# commit 前ゲート: staged 内容に禁止文字列・シークレットが無いことを確認する。
+# 検査本体は tools/secret-scan.sh（pre-push と共用。二重管理にしない）。
+# 有効化: git config core.hooksPath tools/hooks
+set -uo pipefail
+
+scan="$(git rev-parse --show-toplevel)/tools/secret-scan.sh"
+
+if [ ! -x "$scan" ]; then
+  echo "pre-commit: BLOCK: $scan が無い/実行できない。fail-closed で中止する" >&2
+  exit 1
+fi
+
+exec "$scan" staged
