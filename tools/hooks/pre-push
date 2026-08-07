@@ -27,7 +27,7 @@ while read -r _local_ref local_oid _remote_ref remote_oid; do
     # （リモート側で消えた・force-push で置き換わった履歴を過小評価しうる）。
     # そのため「送出なし」と判定した場合も黙って飛ばさず、必ず表示する。
     outgoing=$(git rev-list "$local_oid" --not --remotes="$remote_name") ||
-      { echo "pre-push: BLOCK: 送出範囲を計算できない。fail-closed で中止する" >&2; rc=1; continue; }
+      { echo "pre-push: BLOCK: 送出範囲を計算できない。git fetch --prune 後に再実行する（fail-closed で中止）" >&2; rc=1; continue; }
     if [ -z "$outgoing" ]; then
       echo "pre-push: $local_oid は refs/remotes/$remote_name/* に含まれるため検査を飛ばす（古い場合は git fetch --prune 後に再実行する）"
       continue

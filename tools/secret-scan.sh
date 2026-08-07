@@ -62,7 +62,7 @@ case "$mode" in
     from=${2:-}; to=${3:-}
     [ -n "$from" ] && [ -n "$to" ] || abort "range には <from> <to> が要る"
     ncommit=$(git rev-list --count "$from..$to") ||
-      abort "送出 commit 数を数えられない（$from..$to が解決できない）"
+      abort "送出 commit 数を数えられない（$from..$to が解決できない）。git fetch --prune 後に再実行する"
     # 2 点間の net diff では見落とす: ある commit で追加し後続 commit で削除した行は
     # 差分に出ないが、push すれば履歴には残る。commit ごとの patch を見る。
     # -m はマージ commit の差分も各親に対して出す（重複するが取りこぼさない側に倒す）。
